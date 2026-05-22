@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Brave Table Exporter",
+  "version": "1.0",
+  "description": "Extracts populated tables and dynamic grids into a CSV file.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

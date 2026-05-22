@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body { 
+        font-family: Arial, sans-serif; 
+        padding: 15px; 
+        width: 220px; 
+        text-align: center; 
+        background-color: #f9f9f9;
+      }
+      button { 
+        padding: 10px; 
+        color: white; 
+        border: none; 
+        border-radius: 4px; 
+        cursor: pointer; 
+        width: 100%; 
+        font-weight: bold;
+        transition: background-color 0.2s;
+      }
+      #exportBtn { background-color: #f65314; }
+      #exportBtn:hover { background-color: #d44810; }
+      
+      #stopBtn { 
+        background-color: #e50000; 
+        display: none; 
+      }
+      #stopBtn:hover { background-color: #b30000; }
+      
+      #status {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        color: #333;
+        display: none;
+      }
+      
+      /* Little spinning animation */
+      .loader {
+        border: 3px solid #e0e0e0;
+        border-top: 3px solid #f65314;
+        border-radius: 50%;
+        width: 14px;
+        height: 14px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      p { font-size: 12px; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h3 style="margin-top: 0;">Table Exporter</h3>
+    
+    <div id="status"><div class="loader"></div>Running...</div>
+    
+    <button id="exportBtn">Export to CSV</button>
+    <button id="stopBtn">Stop & Download</button>
+    
+    <script src="popup.js"></script>
+  </body>
+</html>
