@@ -173,13 +173,15 @@ if (typeof window.isExtracting === 'undefined') {
         .trim();
     }
     
-    // Clean up trailing clipboard/copy labels
-    text = text.trim();
+    // Clean up trailing clipboard/copy labels and normalize Unicode whitespace
+    text = text.replace(/[\s\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]+/g, ' ').trim();
     text = text.replace(/\s*Copy\s*text\s*$/i, '');
     text = text.replace(/\s*Copy\s*shared\s*drive\s*id\s*$/i, '');
     text = text.replace(/\s*Copy\s*$/i, '');
     
-    return text.replace(/(\r\n|\n|\r)/gm, " ").replace(/"/g, '""').trim();
+    // Replace newlines and quotes, and perform a thorough Unicode-aware trim
+    text = text.replace(/(\r\n|\n|\r)/gm, " ").replace(/"/g, '""');
+    return text.replace(/^[\s\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]+|[\s\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]+$/g, '');
   }
 
   // Find the header row and determine which column indexes are valid (i.e. have non-empty headers and are not selection cells)
