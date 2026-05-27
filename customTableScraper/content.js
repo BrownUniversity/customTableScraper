@@ -80,8 +80,13 @@ if (typeof window.isExtracting === 'undefined') {
   function cleanCellAndGetText(cell) {
     const clonedCell = cell.cloneNode(true);
     
+    // Determine if this cell belongs to a header row or is a header cell
+    const row = cell.closest('tr, [role="row"]');
+    const isHeader = cell.tagName === 'TH' || 
+                     cell.getAttribute('role') === 'columnheader' || 
+                     (row && (row.querySelector('th') !== null || row.querySelector('[role="columnheader"]') !== null));
+    
     const excludeSelectors = [
-      'button',
       'svg',
       'i',
       'input',
@@ -94,6 +99,10 @@ if (typeof window.isExtracting === 'undefined') {
       'span[role="button"]',
       '[aria-hidden="true"]'
     ];
+    
+    if (!isHeader) {
+      excludeSelectors.push('button');
+    }
     
     excludeSelectors.forEach(selector => {
       clonedCell.querySelectorAll(selector).forEach(el => el.remove());
@@ -110,23 +119,65 @@ if (typeof window.isExtracting === 'undefined') {
     return text.replace(/(\r\n|\n|\r)/gm, " ").replace(/"/g, '""').trim();
   }
 
+  // Find the header row and determine which column indexes are valid (i.e. have non-empty headers and are not selection cells)
+  function getValidColumnIndexes() {
+    const rows = document.querySelectorAll('tr, [role="row"]');
+    for (let row of rows) {
+      if (isUtilityRow(row)) continue;
+      
+      const cells = row.querySelectorAll('th, [role="columnheader"]');
+      if (cells.length > 0) {
+        const allCells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
+        const validIndexes = [];
+        
+        allCells.forEach((cell, index) => {
+          if (isSelectionCell(cell)) return;
+          
+          const text = cleanCellAndGetText(cell);
+          if (text !== "") {
+            validIndexes.push(index);
+          }
+        });
+        
+        if (validIndexes.length > 0) {
+          return validIndexes;
+        }
+      }
+    }
+    return null;
+  }
+
   function extractCurrentPage() {
     const rows = document.querySelectorAll('tr, [role="row"]');
+    const validColumnIndexes = getValidColumnIndexes();
     
     rows.forEach(row => {
       if (isUtilityRow(row)) return;
       
       const cells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
-      
-      // Filter out selection / checkbox cells
-      const activeCells = Array.from(cells).filter(cell => !isSelectionCell(cell));
-      if (activeCells.length === 0) return;
+      if (cells.length === 0) return;
       
       let rowArray = [];
-      activeCells.forEach(cell => {
-        const text = cleanCellAndGetText(cell);
-        rowArray.push(`"${text}"`);
-      });
+      
+      if (validColumnIndexes && validColumnIndexes.length > 0) {
+        validColumnIndexes.forEach(index => {
+          if (index < cells.length) {
+            const text = cleanCellAndGetText(cells[index]);
+            rowArray.push(`"${text}"`);
+          } else {
+            rowArray.push(`""`);
+          }
+        });
+      } else {
+        // Fallback to old behavior if no valid column indexes could be determined
+        const activeCells = Array.from(cells).filter(cell => !isSelectionCell(cell));
+        if (activeCells.length === 0) return;
+        
+        activeCells.forEach(cell => {
+          const text = cleanCellAndGetText(cell);
+          rowArray.push(`"${text}"`);
+        });
+      }
       
       const rowString = rowArray.join(",");
       
