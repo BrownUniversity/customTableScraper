@@ -34,16 +34,97 @@ if (typeof window.isExtracting === 'undefined') {
   
   const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+  // Determine if a cell is simply a checkbox / selection cell
+  function isSelectionCell(cell) {
+    if (cell.querySelector('input[type="checkbox"], input[type="radio"]')) {
+      return true;
+    }
+    if (cell.querySelector('[role="checkbox"], [role="radio"]')) {
+      return true;
+    }
+    if (cell.getAttribute('role') === 'checkbox' || cell.getAttribute('role') === 'radio') {
+      return true;
+    }
+    const text = (cell.innerText || cell.textContent || "").trim();
+    if (text === "") {
+      if (cell.querySelector('svg, button, [role="button"], [class*="checkbox"], [class*="select"]')) {
+        return true;
+      }
+    }
+    if (cell.querySelector('[aria-label*="Select row" i]') || cell.getAttribute('aria-label') === 'Select row') {
+      return true;
+    }
+    return false;
+  }
+
+  // Determine if a row is a bulk-action/settings/toolbar row rather than data
+  function isUtilityRow(row) {
+    const rowClass = (row.className || "").toLowerCase();
+    if (rowClass.includes('action-bar') || rowClass.includes('toolbar') || rowClass.includes('filter') || rowClass.includes('settings')) {
+      return true;
+    }
+    if (row.querySelector('[class*="action-bar"], [class*="toolbar"], [class*="bulk-actions"]')) {
+      return true;
+    }
+    
+    // Skip single-cell banner/progress/loading rows
+    const cells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
+    if (cells.length === 1 && cells[0].hasAttribute('colspan')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Clean elements like buttons/SVGs out of a cloned cell before reading its text
+  function cleanCellAndGetText(cell) {
+    const clonedCell = cell.cloneNode(true);
+    
+    const excludeSelectors = [
+      'button',
+      'svg',
+      'i',
+      'input',
+      'img',
+      '.copy-button',
+      '.copy-icon',
+      '[aria-label*="Copy" i]',
+      '[title*="Copy" i]',
+      '[data-tooltip*="Copy" i]',
+      'span[role="button"]',
+      '[aria-hidden="true"]'
+    ];
+    
+    excludeSelectors.forEach(selector => {
+      clonedCell.querySelectorAll(selector).forEach(el => el.remove());
+    });
+    
+    let text = clonedCell.innerText || clonedCell.textContent || "";
+    
+    // Clean up trailing clipboard/copy labels
+    text = text.trim();
+    text = text.replace(/\s*Copy\s*text\s*$/i, '');
+    text = text.replace(/\s*Copy\s*shared\s*drive\s*id\s*$/i, '');
+    text = text.replace(/\s*Copy\s*$/i, '');
+    
+    return text.replace(/(\r\n|\n|\r)/gm, " ").replace(/"/g, '""').trim();
+  }
+
   function extractCurrentPage() {
     const rows = document.querySelectorAll('tr, [role="row"]');
     
     rows.forEach(row => {
-      let cells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
-      let rowArray = [];
+      if (isUtilityRow(row)) return;
       
-      cells.forEach(cell => {
-        let text = cell.innerText || cell.textContent || "";
-        text = text.replace(/(\r\n|\n|\r)/gm, " ").replace(/"/g, '""').trim();
+      const cells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
+      
+      // Filter out selection / checkbox cells
+      const activeCells = Array.from(cells).filter(cell => !isSelectionCell(cell));
+      if (activeCells.length === 0) return;
+      
+      let rowArray = [];
+      activeCells.forEach(cell => {
+        const text = cleanCellAndGetText(cell);
         rowArray.push(`"${text}"`);
       });
       
@@ -58,32 +139,106 @@ if (typeof window.isExtracting === 'undefined') {
     });
   }
 
+  // Find only the visible pagination next button
+  function findVisibleNextButton() {
+    const buttons = document.querySelectorAll('button[aria-label*="Next"], button[aria-label*="next"], [data-tooltip*="Next"], [title*="Next"]');
+    for (let btn of buttons) {
+      const rect = btn.getBoundingClientRect();
+      const style = window.getComputedStyle(btn);
+      if (rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+        return btn;
+      }
+    }
+    return null;
+  }
+
+  // Robustly click next using standard click and pointer events to cover all JS frameworks
+  function robustClick(element) {
+    if (!element) return;
+    try {
+      element.focus();
+    } catch (e) {}
+    
+    element.click();
+    
+    const events = ['mousedown', 'mouseup', 'click'];
+    events.forEach(eventType => {
+      const event = new MouseEvent(eventType, {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        buttons: 1
+      });
+      element.dispatchEvent(event);
+    });
+  }
+
+  // Signature used to detect if the page actually changed
+  function getPageSignature() {
+    const rows = document.querySelectorAll('tr, [role="row"]');
+    let sig = "";
+    rows.forEach(row => {
+      if (!isUtilityRow(row)) {
+        sig += row.innerText || row.textContent || "";
+      }
+    });
+    return sig;
+  }
+
   let hasNextPage = true;
   let pageCount = 0;
 
   console.log("Starting data extraction...");
 
-  // The loop will now break if hasNextPage becomes false OR if window.stopRequested becomes true
   while (hasNextPage && !window.stopRequested) {
     pageCount++;
     console.log(`Extracting data from page ${pageCount}...`);
     
     extractCurrentPage();
 
-    const nextBtn = document.querySelector('button[aria-label*="Next"], button[aria-label*="next"], [data-tooltip*="Next"], [title*="Next"]');
+    const nextBtn = findVisibleNextButton();
 
     if (nextBtn && 
         !nextBtn.disabled && 
         nextBtn.getAttribute('aria-disabled') !== 'true' &&
         !nextBtn.classList.contains('disabled')) {
         
-      nextBtn.click();
+      const oldSignature = getPageSignature();
+      console.log("Clicking Next...");
+      robustClick(nextBtn);
       
-      // Wait 2.5 seconds total, but check for "stopRequested" every 250ms.
-      // This makes the Stop button highly responsive.
-      for (let i = 0; i < 10; i++) {
+      // Wait for the page signature to change, up to 4 seconds, checking stop requested
+      let pageChanged = false;
+      const startTime = Date.now();
+      while (Date.now() - startTime < 4000) {
         if (window.stopRequested) break;
-        await wait(150); 
+        await wait(200);
+        if (getPageSignature() !== oldSignature) {
+          pageChanged = true;
+          break;
+        }
+      }
+      
+      // Fallback: If page didn't change, try clicking again and check for another 1.5s
+      if (!pageChanged && !window.stopRequested) {
+        console.warn("Page signature didn't change, retrying click...");
+        robustClick(nextBtn);
+        
+        let retryChanged = false;
+        const retryStart = Date.now();
+        while (Date.now() - retryStart < 1500) {
+          if (window.stopRequested) break;
+          await wait(150);
+          if (getPageSignature() !== oldSignature) {
+            retryChanged = true;
+            break;
+          }
+        }
+        
+        if (!retryChanged) {
+          console.warn("Still no change. Stopping to avoid getting stuck.");
+          hasNextPage = false;
+        }
       }
       
     } else {
@@ -92,13 +247,12 @@ if (typeof window.isExtracting === 'undefined') {
     }
     
     if (pageCount > 5000) {
-      console.warn("Reached 1000 page limit.");
+      console.warn("Reached page limit.");
       hasNextPage = false;
     }
   }
 
   if (allCsvData.length > 0) {
-    // Dump data to CSV whether it naturally finished or was stopped early
     const csvContent = allCsvData.join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);

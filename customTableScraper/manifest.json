@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Brave Table Exporter",
+  "name": "Google Admin - Shared Drive Table Exporter",
   "version": "1.0",
-  "description": "Extracts populated tables and dynamic grids into a CSV file.",
-  "permissions": ["activeTab", "scripting"],
+  "description": "Extracts Shared Drives data from the Shared Drive table in the Google Admin console.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
   "action": {
     "default_popup": "popup.html"
   }
