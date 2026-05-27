@@ -76,6 +76,26 @@ if (typeof window.isExtracting === 'undefined') {
     return false;
   }
 
+  // Helper to check if a row is the header row
+  function isHeaderRow(row) {
+    if (!row) return false;
+    if (isUtilityRow(row)) return false;
+    
+    if (row.closest('thead')) return true;
+    if (row.querySelector('th, [role="columnheader"]')) return true;
+    
+    const table = row.closest('table, [role="grid"], [role="table"]');
+    if (table) {
+      const rows = table.querySelectorAll('tr, [role="row"]');
+      for (let r of rows) {
+        if (isUtilityRow(r)) continue;
+        return row === r;
+      }
+    }
+    
+    return false;
+  }
+
   // Clean elements like buttons/SVGs out of a cloned cell before reading its text
   function cleanCellAndGetText(cell) {
     const clonedCell = cell.cloneNode(true);
@@ -84,24 +104,46 @@ if (typeof window.isExtracting === 'undefined') {
     const row = cell.closest('tr, [role="row"]');
     const isHeader = cell.tagName === 'TH' || 
                      cell.getAttribute('role') === 'columnheader' || 
-                     (row && (row.querySelector('th') !== null || row.querySelector('[role="columnheader"]') !== null));
+                     isHeaderRow(row);
     
-    const excludeSelectors = [
-      'svg',
-      'i',
-      'input',
-      'img',
-      '.copy-button',
-      '.copy-icon',
-      '[aria-label*="Copy" i]',
-      '[title*="Copy" i]',
-      '[data-tooltip*="Copy" i]',
-      'span[role="button"]',
-      '[aria-hidden="true"]'
-    ];
-    
-    if (!isHeader) {
-      excludeSelectors.push('button');
+    let excludeSelectors = [];
+    if (isHeader) {
+      // In headers, remove tooltips, help icons, custom web component tags, and visually hidden screen-reader-only
+      // texts (like sort announcements) to keep header names clean and concise.
+      excludeSelectors = [
+        'svg',
+        'i',
+        'input',
+        'img',
+        'cros-tooltip',
+        'g-tooltip',
+        'mwc-tooltip',
+        'cros-help-tooltip',
+        'cros-help',
+        'g-help',
+        'help',
+        '[role="tooltip"]',
+        '[class*="tooltip" i]',
+        '[class*="help" i]',
+        '[class*="visually-hidden" i]',
+        '[class*="sr-only" i]',
+        '[class*="assistive" i]'
+      ];
+    } else {
+      excludeSelectors = [
+        'button',
+        'svg',
+        'i',
+        'input',
+        'img',
+        '.copy-button',
+        '.copy-icon',
+        '[aria-label*="Copy" i]',
+        '[title*="Copy" i]',
+        '[data-tooltip*="Copy" i]',
+        'span[role="button"]',
+        '[aria-hidden="true"]'
+      ];
     }
     
     excludeSelectors.forEach(selector => {
@@ -109,6 +151,27 @@ if (typeof window.isExtracting === 'undefined') {
     });
     
     let text = clonedCell.innerText || clonedCell.textContent || "";
+    
+    // Fallback for header cells if text is empty (common in custom accessible grids where
+    // text is in an aria-hidden container and description is on the th's aria-label/title)
+    if (isHeader && text.trim() === "") {
+      const rawAttr = cell.getAttribute('aria-label') || cell.getAttribute('title') || "";
+      text = rawAttr;
+    }
+    
+    // Clean up sorting text and announcements (e.g. "Storage used Sorted in descending order" -> "Storage used")
+    // as well as help tooltip sentences embedded in Google Admin Console table headers
+    if (isHeader) {
+      text = text
+        .replace(/, sorted\s+\w+$/i, '')
+        .replace(/^Sort\s+by\s+/i, '')
+        .replace(/\s*Sorted\s+in\s+(ascending|descending)\s+order/i, '')
+        .replace(/\s*Sorted\s*$/i, '')
+        .replace(/Shows\s+storage\s+limit.*/i, '')
+        .replace(/A\s+shared\s+drive.*/i, '')
+        .replace(/Learn\s+more.*/i, '')
+        .trim();
+    }
     
     // Clean up trailing clipboard/copy labels
     text = text.trim();
@@ -123,10 +186,7 @@ if (typeof window.isExtracting === 'undefined') {
   function getValidColumnIndexes() {
     const rows = document.querySelectorAll('tr, [role="row"]');
     for (let row of rows) {
-      if (isUtilityRow(row)) continue;
-      
-      const cells = row.querySelectorAll('th, [role="columnheader"]');
-      if (cells.length > 0) {
+      if (isHeaderRow(row)) {
         const allCells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
         const validIndexes = [];
         
@@ -134,7 +194,7 @@ if (typeof window.isExtracting === 'undefined') {
           if (isSelectionCell(cell)) return;
           
           const text = cleanCellAndGetText(cell);
-          if (text !== "") {
+          if (text !== "" && !text.toLowerCase().includes("manage columns")) {
             validIndexes.push(index);
           }
         });
