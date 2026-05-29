@@ -152,11 +152,19 @@ if (typeof window.isExtracting === 'undefined') {
 
     let text = clonedCell.innerText || clonedCell.textContent || "";
 
-    // Fallback for header cells if text is empty (common in custom accessible grids where
-    // text is in an aria-hidden container and description is on the th's aria-label/title)
-    if (isHeader && text.trim() === "") {
-      const rawAttr = cell.getAttribute('aria-label') || cell.getAttribute('title') || "";
-      text = rawAttr;
+    // Fallback for any cell if text is empty after cleaning/stripping (common in accessible grids
+    // where visual text is hidden via aria-hidden and the value is on an aria-label or title)
+    if (text.trim() === "") {
+      let rawAttr = cell.getAttribute('title') || cell.getAttribute('aria-label') || "";
+      if (rawAttr.trim() === "") {
+        const titledEl = cell.querySelector('[title], [aria-label]');
+        if (titledEl) {
+          rawAttr = titledEl.getAttribute('title') || titledEl.getAttribute('aria-label') || "";
+        }
+      }
+      if (rawAttr.trim() !== "") {
+        text = rawAttr;
+      }
     }
 
     // Clean up sorting text and announcements (e.g. "Storage used Sorted in descending order" -> "Storage used")
