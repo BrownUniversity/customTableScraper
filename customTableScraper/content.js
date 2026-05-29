@@ -254,8 +254,32 @@ if (typeof window.isExtracting === 'undefined') {
 
   // Find only the visible pagination next button
   function findVisibleNextButton() {
-    const buttons = document.querySelectorAll('button[aria-label*="Next"], button[aria-label*="next"], [data-tooltip*="Next"], [title*="Next"]');
+    const buttons = document.querySelectorAll(
+      'button[aria-label*="Next"], button[aria-label*="next"], ' +
+      '[data-tooltip*="Next"], [data-tooltip*="next"], ' +
+      '[title*="Next"], [title*="next"], ' +
+      '[aria-label*="Next Page" i], [aria-label*="next page" i]'
+    );
     for (let btn of buttons) {
+      // 1. Exclude elements that are inside a table data cell
+      if (btn.closest('td, [role="gridcell"], [role="cell"]')) {
+        continue;
+      }
+      
+      // 2. Ensure it's a button, custom button element, or has role="button"
+      const tagName = btn.tagName.toLowerCase();
+      const isButton = tagName === 'button' || 
+                       btn.getAttribute('role') === 'button' || 
+                       tagName.includes('button') || 
+                       tagName.includes('cros-') || 
+                       tagName.includes('g-') ||
+                       btn.classList.contains('button') ||
+                       btn.classList.contains('btn');
+      
+      if (!isButton) {
+        continue;
+      }
+
       const rect = btn.getBoundingClientRect();
       const style = window.getComputedStyle(btn);
       if (rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
@@ -268,6 +292,9 @@ if (typeof window.isExtracting === 'undefined') {
   // Robustly click next using standard click and pointer events to cover all JS frameworks
   function robustClick(element) {
     if (!element) return;
+    try {
+      element.scrollIntoView({ block: 'center' });
+    } catch (e) {}
     try {
       element.focus();
     } catch (e) { }
@@ -313,10 +340,12 @@ if (typeof window.isExtracting === 'undefined') {
 
     if (nextBtn &&
       !nextBtn.disabled &&
+      !nextBtn.hasAttribute('disabled') &&
       nextBtn.getAttribute('aria-disabled') !== 'true' &&
       !nextBtn.classList.contains('disabled')) {
 
       const oldSignature = getPageSignature();
+      console.log("Found Next Button:", nextBtn.outerHTML);
       console.log("Clicking Next...");
       robustClick(nextBtn);
 
@@ -332,9 +361,9 @@ if (typeof window.isExtracting === 'undefined') {
         }
       }
 
-      // Fallback: If page didn't change, try clicking again and check for another 1.5s
+      // Fallback: If page didn't change, try clicking again and check for another 2s
       if (!pageChanged && !window.stopRequested) {
-        console.warn("Page signature didn't change, retrying click...");
+        console.log("Page signature didn't change, retrying click...");
         robustClick(nextBtn);
 
         let retryChanged = false;
@@ -349,14 +378,18 @@ if (typeof window.isExtracting === 'undefined') {
         }
 
         if (!retryChanged) {
-          console.warn("Still no change. Stopping to avoid getting stuck.");
+          console.log("Still no change after retry. Stopping to avoid getting stuck.");
           hasNextPage = false;
         }
       }
 
     } else {
       hasNextPage = false;
-      console.log("Reached the end of the pages.");
+      if (nextBtn) {
+        console.log("Next button is disabled or not clickable:", nextBtn.outerHTML);
+      } else {
+        console.log("Next button not found. Reached the end of the pages.");
+      }
     }
 
     if (pageCount > 10000) {
