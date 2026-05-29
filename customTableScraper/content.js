@@ -359,7 +359,7 @@ if (typeof window.isExtracting === 'undefined') {
       console.log("Reached the end of the pages.");
     }
 
-    if (pageCount > 5000) {
+    if (pageCount > 10000) {
       console.warn("Reached page limit.");
       hasNextPage = false;
     }
