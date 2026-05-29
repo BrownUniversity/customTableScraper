@@ -7,7 +7,17 @@
     "activeTab",
     "scripting"
   ],
+  "icons": {
+    "16": "table-icon.png",
+    "48": "table-icon.png",
+    "128": "table-icon.png"
+  },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "table-icon.png",
+      "48": "table-icon.png",
+      "128": "table-icon.png"
+    }
   }
 }

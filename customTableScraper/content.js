@@ -5,13 +5,13 @@ if (typeof window.isExtracting === 'undefined') {
 
   // Listen for messages from popup.js
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    
+
     // The popup is asking if the script is currently running
     if (request.action === "checkStatus") {
       sendResponse({ isRunning: window.isExtracting });
       return true; // Keeps the message channel open for the response
     }
-    
+
     // The popup told us to stop
     if (request.action === "stopExtraction") {
       console.log("Stop requested by user. Terminating early...");
@@ -25,13 +25,13 @@ if (typeof window.isExtracting === 'undefined') {
 (async function exportTableWithPagination() {
   // Prevent overlapping executions
   if (window.isExtracting) return;
-  
+
   window.isExtracting = true;
   window.stopRequested = false;
 
   const allCsvData = [];
   const seenRows = new Set();
-  
+
   const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
   // Determine if a cell is simply a checkbox / selection cell
@@ -66,13 +66,13 @@ if (typeof window.isExtracting === 'undefined') {
     if (row.querySelector('[class*="action-bar"], [class*="toolbar"], [class*="bulk-actions"]')) {
       return true;
     }
-    
+
     // Skip single-cell banner/progress/loading rows
     const cells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
     if (cells.length === 1 && cells[0].hasAttribute('colspan')) {
       return true;
     }
-    
+
     return false;
   }
 
@@ -80,10 +80,10 @@ if (typeof window.isExtracting === 'undefined') {
   function isHeaderRow(row) {
     if (!row) return false;
     if (isUtilityRow(row)) return false;
-    
+
     if (row.closest('thead')) return true;
     if (row.querySelector('th, [role="columnheader"]')) return true;
-    
+
     const table = row.closest('table, [role="grid"], [role="table"]');
     if (table) {
       const rows = table.querySelectorAll('tr, [role="row"]');
@@ -92,20 +92,20 @@ if (typeof window.isExtracting === 'undefined') {
         return row === r;
       }
     }
-    
+
     return false;
   }
 
   // Clean elements like buttons/SVGs out of a cloned cell before reading its text
   function cleanCellAndGetText(cell) {
     const clonedCell = cell.cloneNode(true);
-    
+
     // Determine if this cell belongs to a header row or is a header cell
     const row = cell.closest('tr, [role="row"]');
-    const isHeader = cell.tagName === 'TH' || 
-                     cell.getAttribute('role') === 'columnheader' || 
-                     isHeaderRow(row);
-    
+    const isHeader = cell.tagName === 'TH' ||
+      cell.getAttribute('role') === 'columnheader' ||
+      isHeaderRow(row);
+
     let excludeSelectors = [];
     if (isHeader) {
       // In headers, remove tooltips, help icons, custom web component tags, and visually hidden screen-reader-only
@@ -145,20 +145,20 @@ if (typeof window.isExtracting === 'undefined') {
         '[aria-hidden="true"]'
       ];
     }
-    
+
     excludeSelectors.forEach(selector => {
       clonedCell.querySelectorAll(selector).forEach(el => el.remove());
     });
-    
+
     let text = clonedCell.innerText || clonedCell.textContent || "";
-    
+
     // Fallback for header cells if text is empty (common in custom accessible grids where
     // text is in an aria-hidden container and description is on the th's aria-label/title)
     if (isHeader && text.trim() === "") {
       const rawAttr = cell.getAttribute('aria-label') || cell.getAttribute('title') || "";
       text = rawAttr;
     }
-    
+
     // Clean up sorting text and announcements (e.g. "Storage used Sorted in descending order" -> "Storage used")
     // as well as help tooltip sentences embedded in Google Admin Console table headers
     if (isHeader) {
@@ -172,13 +172,13 @@ if (typeof window.isExtracting === 'undefined') {
         .replace(/Learn\s+more.*/i, '')
         .trim();
     }
-    
+
     // Clean up trailing clipboard/copy labels and normalize Unicode whitespace
     text = text.replace(/[\s\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]+/g, ' ').trim();
     text = text.replace(/\s*Copy\s*text\s*$/i, '');
     text = text.replace(/\s*Copy\s*shared\s*drive\s*id\s*$/i, '');
     text = text.replace(/\s*Copy\s*$/i, '');
-    
+
     // Replace newlines and quotes, and perform a thorough Unicode-aware trim
     text = text.replace(/(\r\n|\n|\r)/gm, " ").replace(/"/g, '""');
     return text.replace(/^[\s\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]+|[\s\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]+$/g, '');
@@ -191,16 +191,16 @@ if (typeof window.isExtracting === 'undefined') {
       if (isHeaderRow(row)) {
         const allCells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
         const validIndexes = [];
-        
+
         allCells.forEach((cell, index) => {
           if (isSelectionCell(cell)) return;
-          
+
           const text = cleanCellAndGetText(cell);
           if (text !== "" && !text.toLowerCase().includes("manage columns")) {
             validIndexes.push(index);
           }
         });
-        
+
         if (validIndexes.length > 0) {
           return validIndexes;
         }
@@ -212,15 +212,15 @@ if (typeof window.isExtracting === 'undefined') {
   function extractCurrentPage() {
     const rows = document.querySelectorAll('tr, [role="row"]');
     const validColumnIndexes = getValidColumnIndexes();
-    
+
     rows.forEach(row => {
       if (isUtilityRow(row)) return;
-      
+
       const cells = row.querySelectorAll('th, td, [role="cell"], [role="columnheader"], [role="gridcell"]');
       if (cells.length === 0) return;
-      
+
       let rowArray = [];
-      
+
       if (validColumnIndexes && validColumnIndexes.length > 0) {
         validColumnIndexes.forEach(index => {
           if (index < cells.length) {
@@ -234,15 +234,15 @@ if (typeof window.isExtracting === 'undefined') {
         // Fallback to old behavior if no valid column indexes could be determined
         const activeCells = Array.from(cells).filter(cell => !isSelectionCell(cell));
         if (activeCells.length === 0) return;
-        
+
         activeCells.forEach(cell => {
           const text = cleanCellAndGetText(cell);
           rowArray.push(`"${text}"`);
         });
       }
-      
+
       const rowString = rowArray.join(",");
-      
+
       if (rowString.replace(/"/g, '').replace(/,/g, '').trim() !== "") {
         if (!seenRows.has(rowString)) {
           seenRows.add(rowString);
@@ -270,10 +270,10 @@ if (typeof window.isExtracting === 'undefined') {
     if (!element) return;
     try {
       element.focus();
-    } catch (e) {}
-    
+    } catch (e) { }
+
     element.click();
-    
+
     const events = ['mousedown', 'mouseup', 'click'];
     events.forEach(eventType => {
       const event = new MouseEvent(eventType, {
@@ -306,20 +306,20 @@ if (typeof window.isExtracting === 'undefined') {
   while (hasNextPage && !window.stopRequested) {
     pageCount++;
     console.log(`Extracting data from page ${pageCount}...`);
-    
+
     extractCurrentPage();
 
     const nextBtn = findVisibleNextButton();
 
-    if (nextBtn && 
-        !nextBtn.disabled && 
-        nextBtn.getAttribute('aria-disabled') !== 'true' &&
-        !nextBtn.classList.contains('disabled')) {
-        
+    if (nextBtn &&
+      !nextBtn.disabled &&
+      nextBtn.getAttribute('aria-disabled') !== 'true' &&
+      !nextBtn.classList.contains('disabled')) {
+
       const oldSignature = getPageSignature();
       console.log("Clicking Next...");
       robustClick(nextBtn);
-      
+
       // Wait for the page signature to change, up to 4 seconds, checking stop requested
       let pageChanged = false;
       const startTime = Date.now();
@@ -331,15 +331,15 @@ if (typeof window.isExtracting === 'undefined') {
           break;
         }
       }
-      
+
       // Fallback: If page didn't change, try clicking again and check for another 1.5s
       if (!pageChanged && !window.stopRequested) {
         console.warn("Page signature didn't change, retrying click...");
         robustClick(nextBtn);
-        
+
         let retryChanged = false;
         const retryStart = Date.now();
-        while (Date.now() - retryStart < 1500) {
+        while (Date.now() - retryStart < 2000) {
           if (window.stopRequested) break;
           await wait(150);
           if (getPageSignature() !== oldSignature) {
@@ -347,18 +347,18 @@ if (typeof window.isExtracting === 'undefined') {
             break;
           }
         }
-        
+
         if (!retryChanged) {
           console.warn("Still no change. Stopping to avoid getting stuck.");
           hasNextPage = false;
         }
       }
-      
+
     } else {
       hasNextPage = false;
       console.log("Reached the end of the pages.");
     }
-    
+
     if (pageCount > 5000) {
       console.warn("Reached page limit.");
       hasNextPage = false;
@@ -369,16 +369,16 @@ if (typeof window.isExtracting === 'undefined') {
     const csvContent = allCsvData.join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    
+
     const downloadLink = document.createElement("a");
     downloadLink.href = url;
     downloadLink.download = `Google_Admin_List_Export_${new Date().getTime()}.csv`;
-    
+
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
-    
+
     console.log(`Saved ${allCsvData.length} total rows.`);
   } else {
     alert("Table elements were found, but no text could be extracted.");
